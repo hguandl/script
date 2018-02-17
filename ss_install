@@ -1,11 +1,13 @@
-#!/bin/bash
-PWD=`pwd`
-DEP=$PWD/dependencies
+#!/bin/sh
+export DEP=$PWD/dependencies
+export USERID=`id -u`
 # Check ROOT Permissions
-if [ "$UID" -ne 0 ] && [ -f /etc/sudoers ]; then
-  SUDO=sudo
-else if [ "$UID" -eq 0 ]; then
-  SUDO=
+if [ "$USERID" != 0 ] && [ -f /etc/sudoers ]; then
+  unset SUDO
+  export SUDO=sudo
+else if [ "$USERID" = 0 ]; then
+  unset SUDO
+  export SUDO=
 else if [ $LANG=zh_CN.UTF-8 ]; then
   echo "你没有root权限,请尝试安装sudo或者切换至root用户"
   exit 1
@@ -15,32 +17,61 @@ else
 fi
 fi
 fi
+unset USERID
 
 # Check memsize
 MEM_CHECK=`cat /proc/meminfo | grep MemTotal | grep '[0-9]' -o | awk BEGIN{RS=EOF}'{gsub(/\n/,"");print}'`
 # Preclude out of memory
 if [ "$MEM_CHECK" -ge "524288" ]; then
-  cpu_num=`cat /proc/cpuinfo | grep processor | wc -l`
+  export CPU_NUM=`cat /proc/cpuinfo | grep processor | wc -l`
 else
-  cpu_num=1
+  export CPU_NUM=1
 fi
 
 # Check linux distribution
+#Debian Base
 if [ -f /etc/debian_version ]; then
 DEBIAN_VERSION=`cat /etc/debian_version`
 
 case "$DEBIAN_VERSION" in
   7|7.0|7.1|7.2|7.3|7.4|7.5|7.6|7.7|7.8|7.9|7.10|7.11)
-    source $DEP/debian-7
+    . $DEP/debian-7
   ;;
-  8|8.0|8.1|8.2|8.3|8.4|8.5|8.6|8.7|8.8|8.9|8.10)
-    source $DEP/debian-8
+  8|8.0|8.1|8.2|8.3|8.4|8.5|8.6|8.7|8.8|8.9|8.10|jessie/sid)
+    . $DEP/debian-8
   ;;
-  9|9.0|9.1|9.2|9.3)
-    source $DEP/debian-9
+  9|9.0|9.1|9.2|9.3|stretch/sid)
+    . $DEP/debian-9
   ;;
   buster/sid)
-    source $DEP/debian-sid
+    . $DEP/debian-sid
 esac
 
 fi
+
+#Redhat Base
+if [ -f /etc/redhat-release ]; then
+REDHAT_VERSION=`cat /etc/redhat-release | grep -oE  "[0-9.]+"`
+
+case "$REDHAT_VERSION" in
+  7.0.1406|7.1.1503|7.2.1511|7.3.1611|7.4.1708)
+    . $DEP/redhat7
+  ;;
+  6.0|6.1|6.2|6.3|6.4|6.5|6.6|6.7|6.8|6.9)
+    . $DEP/redhat6
+esac
+
+fi
+
+export KERNEL_VERSION=`uname -r`
+export VM=`$SUDO virt-what`
+
+. $DEP/bbr
+
+unset PWD
+unset DEP
+unset SUDO
+unset MEM_CHECK
+unset CPU_NUM
+unset DEBIAN_VERSION
+unset REDHAT_VERSION

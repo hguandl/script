@@ -1,0 +1,136 @@
+#!/bin/sh
+#TCP fast open check
+if [ -f "/proc/sys/net/ipv4/tcp_fastopen" ]; then
+FASTOPEN_CHECK=`cat /proc/sys/net/ipv4/tcp_fastopen`
+if [ $FASTOPEN_CHECK = "3" ]; then
+FASTOPEN=--fast-open
+else
+FASTOPEN=
+fi
+else
+if [ $LANG=zh_CN.UTF-8 ];
+then
+  echo "不支持TCP FASTOPEN"
+else
+  echo "Not support TCP FASTOPEN"
+fi
+fi
+
+read -p "Encryption(default:chacha20-ietf-poly1305): " ENCRYPTION
+
+if [ -z $ENCRYPTION ]
+then
+ENCRYPTION=chacha20-ietf-poly1305
+fi
+
+read -p "Run User(default:nobody): " RUN_USER
+
+if [ -z $RUN_USER ]
+then
+RUN_USER=nobody
+fi
+
+read -p "Enable udprelay mode(default:yes):(yes/no) " UDP
+
+if [ "$UDP" = "yes" ] || [ "$UDP" = "" ]; then
+UDP=-u
+elif [ "$UDP" = "no" ]; then
+UDP=
+fi
+
+read -p "Remote DNS(default:8.8.8.8): " REMOTE_DNS
+
+if [ -z $REMOTE_DNS ]; then
+REMOTE_DNS=8.8.8.8
+fi
+
+read -p "Enable TCP_NODELAY(default:yes):(yes/no) " TCP_NODELAY
+
+if [ "$TCP_NODELAY" = "yes" ] || [ "$TCP_NODELAY" = "" ]; then
+TCP_NODELAY=--no-delay
+elif [ $TCP_NODELAY = "no" ]; then
+TCP_NODELAY=
+fi
+
+read -p "Enable port reuse(default:yes):(yes/no) " PORT_REUSE
+
+if [ "$PORT_REUSE" = "yes" ] || [ "$PORT_REUSE" = "" ]; then
+PORT_REUSE=--reuse-port
+elif [ $PORT_REUSE = "no" ]; then
+PORT_REUSE=
+fi
+
+read -p "Enable SIP003 plugin. (Experimental)(default:yes):(yes/no) " PLUGIN_CHECK
+
+if [ "$PLUGIN_CHECK" = "yes" ] || [ "$PLUGIN_CHECK" = "" ]; then
+read -p "Select plugin: (1.simple-obfs ) " PLUGIN
+case "$PLUGIN" in
+  1|simple-obfs)
+read -p "Set SIP003 plugin options. (Experimental)(default:tls):(tls/http) " PLUGIN_OPTIONS
+if [ "$PLUGIN_OPTIONS" = "tls" ] || [ "$PLUGIN_OPTIONS" = "" ]; then
+PLUGIN_OPTIONS=tls
+elif [ "$PLUGIN_OPTIONS" = "http" ]; then
+PLUGIN_OPTIONS=http
+else if [ $LANG=zh_CN.UTF-8 ]; then
+  echo "参数无效"
+else
+  echo "Invalid parameters"
+fi
+fi
+esac
+fi
+
+port_check() {
+read -p "port: " PORT
+
+if [ "$PORT" -lt "8300" ] || [ "$PORT" -ge "8400" ]; then
+read -p "passwd: " PASSWORD
+IPV6=`curl -I -s --connect-timeout 5 ipv6.google.com -w %{http_code} | tail -n1`
+if [ "$PLUGIN_CHECK" = "yes" ] || [ "$PLUGIN_CHECK" = "" ]; then
+if [ "$IPV6" = "200" ]; then
+echo $PASSWD | sudo -S ss-server -s 0.0.0.0 -s :: -p $PORT -k $PASSWORD -m $ENCRYPTION -a $RUN_USER $UDP -d $REMOTE_DNS -6 $TCP_NODELAY $FASTOPEN $PORT_REUSE --plugin obfs-server --plugin-opts "obfs=$PLUGIN_OPTIONS" -f /root/ss/shadowsocks-1.pid
+else
+echo $PASSWD | sudo -S ss-server -s 0.0.0.0 -p $PORT -k $PASSWORD -m $ENCRYPTION -a $RUN_USER $UDP -d $REMOTE_DNS $TCP_NODELAY $FASTOPEN $PORT_REUSE --plugin obfs-server --plugin-opts "obfs=$PLUGIN_OPTIONS" -f /root/ss/shadowsocks-1.pid
+fi
+elif [ "$PLUGIN_CHECK" = "no" ]; then
+if [ "$IPV6" = "200" ]; then
+echo $PASSWD | sudo -S ss-server -s 0.0.0.0 -s :: -p $PORT -k $PASSWORD -m $ENCRYPTION -a $RUN_USER $UDP -d $REMOTE_DNS -6 $TCP_NODELAY $FASTOPEN $PORT_REUSE -f /root/ss/shadowsocks-1.pid
+else
+echo $PASSWD | sudo -S ss-server -s 0.0.0.0 -p $PORT -k $PASSWORD -m $ENCRYPTION -a $RUN_USER $UDP -d $REMOTE_DNS $TCP_NODELAY $FASTOPEN $PORT_REUSE -f /root/ss/shadowsocks-1.pid
+fi
+else if [ $LANG=zh_CN.UTF-8 ]; then
+  echo "请使用小于8300且大于8400的端口"
+  port_check
+else
+  echo "Please use a port smaller than 8300 and larger than 8400"
+  port_check
+fi
+fi
+fi
+if [ $OS = redhat7 ]; then
+echo $PASSWD | sudo -S firewall-cmd --permanent --zone=public --add-port=$PORT/udp
+echo $PASSWD | sudo -S firewall-cmd --permanent --zone=public --add-port=$PORT/tcp
+firewall-cmd --reload
+else if [ $OS = redhat6 ]; then
+echo $PASSWD | sudo -S iptables -I INPUT -p tcp --dport $PORT -j ACCEPT
+echo $PASSWD | sudo -S iptables -I INPUT -p udp --dport $PORT -j ACCEPT
+echo $PASSWD | sudo -S service iptables save
+fi
+fi
+}
+
+port_check
+
+unset DEP
+unset SUDO
+unset ENCRYPTION
+unset RUN_USER
+unset PORT
+unset PASSWD
+unset FASTOPEN
+unset UDP
+unset REMOTE_DNS
+unset TCP_NODELAY
+unset PLUGIN
+unset PLUGIN_OPTIONS
+unset FASTOPEN_CHECK
